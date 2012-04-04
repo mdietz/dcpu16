@@ -61,7 +61,7 @@ u16 *dcpu_opr(struct dcpu *d, u16 code) {
 	}
 }
 
-void dcpu_step(struct dcpu *d) {
+int dcpu_step(struct dcpu *d) {
 	u16 op = d->m[d->pc++];
 	u16 dst;
 	u32 res;
@@ -77,10 +77,10 @@ void dcpu_step(struct dcpu *d) {
 				d->m[--(d->sp)] = d->pc;
 				d->pc = a;
 			}
-			return;
+			return 1;
 		default:
 			fprintf(stderr, "< ILLEGAL OPCODE >\n");
-			exit(0);
+			return 0;
 		}
 	}
 
@@ -123,20 +123,21 @@ void dcpu_step(struct dcpu *d) {
 
 	if (d->skip) {
 		d->skip = 0;
-		return;
+		return 1;
 	}
 	if (dst < 0x1f) {
 		*aa = res;
 		d->ov = res >> 16;
 	}
-	return;
+	return 1;
 
 cond:
 	if (d->skip) {
 		d->skip = 0;
-		return;
+		return 1;
 	} 
 	d->skip = !res;
+	return 1;
 }
 
 void dumpheader(void) {
@@ -150,6 +151,20 @@ void dumpstate(struct dcpu *d) {
 		"%04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x\n",
 		d->pc, d->sp, d->ov, d->skip,
 		d->r[0], d->r[1], d->r[2], d->r[3], d->r[4], d->r[5], d->r[6], d->r[7]);
+}
+
+void dumpmem(struct dcpu *d) {
+	int i;
+	fprintf(stderr, "\nMemDump\n");
+	for(i = 0; i < 65536/512; i++){
+		fprintf(stderr,
+		"%02x | %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x\n",
+		i*512, d->m[i*256], d->m[i*256+2], d->m[i*256+4], d->m[i*256+6],
+		d->m[i*256+8], d->m[i*256+10], d->m[i*256+12], d->m[i*256+14],
+		d->m[i*256+16], d->m[i*256+18], d->m[i*256+20], d->m[i*256+22],
+		d->m[i*256+24], d->m[i*256+26], d->m[i*256+28], d->m[i*256+30]);
+	}
+
 }
 
 void load(struct dcpu *d, FILE *fp) {
@@ -174,8 +189,10 @@ int main(int argc, char **argv) {
 	dumpheader();
 	for (;;) {
 		dumpstate(&d);
-		dcpu_step(&d);
-	}		
+		if(!dcpu_step(&d))
+			break;
+	}
+	dumpmem(&d);
 	return 0;
 }
 
